@@ -10,8 +10,10 @@ import ua.sukhyna.vo.pages.MatchPageVO;
 import ua.sukhyna.vo.pages.SportPageVO;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-import static ua.sukhyna.configuration.WebDriverConfig.initDriver;
+import static ua.sukhyna.configuration.WebDriverConfig.getWebDriver;
 
 @Slf4j
 public class LeonParser {
@@ -20,27 +22,37 @@ public class LeonParser {
     private static final List<String> SPORTS = List.of("soccer", "tennis", "hockey", "basketball");
     private final PageParseService parseService = new LeonParseService();
 
-    public void getBetting() throws InterruptedException {
+    public void getBetting(int threadCount) {
+
+        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
+
         for (String sport : SPORTS) {
-            getBettingBySport(sport);
+            executorService.execute(() -> {
+                try {
+                    getBettingBySport(sport);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            });
         }
+        executorService.shutdown();
     }
 
     private void getBettingBySport(String sport) throws InterruptedException {
 
-        log.info("Loading webdriver...");
+        WebDriver driver = getWebDriver();
 
-        WebDriver driver = initDriver();
-
-        log.info("Loading sport ({}) page...", sport);
+        log.debug("Loading sport ({}) page...", sport);
 
         SportPageVO sportData = getSportData(sport, driver);
 
-        log.info("Loading top leagues pages...");
+        log.debug("Found {} leagues. Loading top leagues pages... ", sportData.getTopLeagues().size());
 
         for (LeaguePageVO topLeague : sportData.getTopLeagues()) {
             driver.get(topLeague.getLeagueUrl());
             LeaguePageVO leagueData = getLeagueData(driver, topLeague);
+
+            log.debug("Found {} matches. Loading matches pages... ", leagueData.getMatches().size());
 
             for (MatchPageVO match : leagueData.getMatches()) {
                 driver.get(match.getMatchUrl());
@@ -53,6 +65,7 @@ public class LeonParser {
                 printBets(matchData);
             }
         }
+        driver.quit();
     }
 
     private SportPageVO getSportData(String sport, WebDriver driver) {

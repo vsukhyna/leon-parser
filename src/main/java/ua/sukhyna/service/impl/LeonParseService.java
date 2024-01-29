@@ -100,7 +100,6 @@ public class LeonParseService implements PageParseService {
             String marketOdds = market.findElement(By.cssSelector(".sport-event-details-market-group__content")).getText();
             matchMarkets.put(marketName, marketOdds);
         }
-
         return matchMarkets;
     }
 
