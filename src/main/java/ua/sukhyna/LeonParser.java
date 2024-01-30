@@ -9,38 +9,13 @@ import ua.sukhyna.vo.pages.LeaguePageVO;
 import ua.sukhyna.vo.pages.MatchPageVO;
 import ua.sukhyna.vo.pages.SportPageVO;
 
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-import static ua.sukhyna.configuration.WebDriverConfig.getWebDriver;
-
 @Slf4j
 public class LeonParser {
 
     private static final String START_URL = "https://leonbets.com/";
-    private static final List<String> SPORTS = List.of("soccer", "tennis", "hockey", "basketball");
     private final PageParseService parseService = new LeonParseService();
 
-    public void getBetting(int threadCount) {
-
-        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
-
-        for (String sport : SPORTS) {
-            executorService.execute(() -> {
-                try {
-                    getBettingBySport(sport);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            });
-        }
-        executorService.shutdown();
-    }
-
-    private void getBettingBySport(String sport) throws InterruptedException {
-
-        WebDriver driver = getWebDriver();
+    public void getBettingBySport(String sport, WebDriver driver) throws InterruptedException {
 
         log.debug("Loading sport ({}) page...", sport);
 
@@ -49,14 +24,13 @@ public class LeonParser {
         log.debug("Found {} leagues. Loading top leagues pages... ", sportData.getTopLeagues().size());
 
         for (LeaguePageVO topLeague : sportData.getTopLeagues()) {
-            driver.get(topLeague.getLeagueUrl());
             LeaguePageVO leagueData = getLeagueData(driver, topLeague);
 
             log.debug("Found {} matches. Loading matches pages... ", leagueData.getMatches().size());
 
             for (MatchPageVO match : leagueData.getMatches()) {
                 driver.get(match.getMatchUrl());
-                MatchPageVO matchData = getMatchData(driver);
+                MatchPageVO matchData = getMatchData(driver, match.getMatchUrl());
                 matchData.setName(match.getName());
                 matchData.setMatchId(match.getMatchId());
                 matchData.setDatetime(match.getDatetime());
@@ -65,7 +39,6 @@ public class LeonParser {
                 printBets(matchData);
             }
         }
-        driver.quit();
     }
 
     private SportPageVO getSportData(String sport, WebDriver driver) {
@@ -73,13 +46,13 @@ public class LeonParser {
     }
 
     private LeaguePageVO getLeagueData(WebDriver driver, LeaguePageVO topLeague) throws InterruptedException {
-        LeaguePageVO leaguePageVO = parseService.parseTopLeaguePage(driver);
+        LeaguePageVO leaguePageVO = parseService.parseTopLeaguePage(driver, topLeague.getLeagueUrl());
         leaguePageVO.setLeagueName(topLeague.getLeagueName());
         return leaguePageVO;
     }
 
-    private MatchPageVO getMatchData(WebDriver driver) throws InterruptedException {
-        return parseService.parseMatchPage(driver);
+    private MatchPageVO getMatchData(WebDriver driver, String matchUrl) throws InterruptedException {
+        return parseService.parseMatchPage(driver, matchUrl);
     }
 
     private void printBets(MatchPageVO matchData) {

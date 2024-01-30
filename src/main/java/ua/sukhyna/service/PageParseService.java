@@ -9,7 +9,7 @@ public interface PageParseService {
 
     SportPageVO parseSportPage(String url, WebDriver driver, String sport);
 
-    LeaguePageVO parseTopLeaguePage(WebDriver driver) throws InterruptedException;
+    LeaguePageVO parseTopLeaguePage(WebDriver driver, String url) throws InterruptedException;
 
-    MatchPageVO parseMatchPage(WebDriver driver) throws InterruptedException;
+    MatchPageVO parseMatchPage(WebDriver driver, String url) throws InterruptedException;
 }

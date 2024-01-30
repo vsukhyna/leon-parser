@@ -1,8 +1,6 @@
 package ua.sukhyna.service.impl;
 
-import org.openqa.selenium.By;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
+import org.openqa.selenium.*;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import ua.sukhyna.service.PageParseService;
@@ -25,9 +23,15 @@ public class LeonParseService implements PageParseService {
 
     @Override
     public SportPageVO parseSportPage(String url, WebDriver startPage, String sport) {
-        startPage.get(url + "bets/" + sport);
-        List<WebElement> topLeagues = getElementWithWaiting(startPage, By.cssSelector(".undefined.leagues-list--top_Q3nAI"))
+        String sportUrl = url + "bets/" + sport;
+        startPage.get(sportUrl);
+
+        List<WebElement> topLeagues = getElementOnPageWithWaiting(
+                startPage,
+                By.cssSelector(".undefined.leagues-list--top_Q3nAI"),
+                sportUrl)
                 .findElements(By.cssSelector("a[href]"));
+
         List<LeaguePageVO> topLeaguesVO = new ArrayList<>();
 
         for (WebElement topLeague : topLeagues) {
@@ -46,40 +50,55 @@ public class LeonParseService implements PageParseService {
     }
 
     @Override
-    public LeaguePageVO parseTopLeaguePage(WebDriver driver) throws InterruptedException {
-
+    public LeaguePageVO parseTopLeaguePage(WebDriver driver, String leagueUrl) throws InterruptedException {
+        driver.get(leagueUrl);
+        TimeUnit.SECONDS.sleep(2);
         LeaguePageVO leagueVO = new LeaguePageVO();
-
-        List<WebElement> matches =
-                getElementWithWaiting(driver, By.cssSelector(".sportline-events-list_bf1nX"))
-                        .findElements(By.cssSelector(".sportline-event-block_isrbB"));
 
         List<MatchPageVO> matchesVO = new ArrayList<>();
 
-        for (WebElement match : matches) {
-            TimeUnit.SECONDS.sleep(3);
-            String matchName = parseMatchName(match);
-            String matchDate = parseMatchDate(match);
-            String matchLink = getLink(match.findElement(By.cssSelector("a[href]")));
-            String matchId = parseMatchId(matchLink);
+        MatchPageVO matchPageVO = new MatchPageVO();
 
-            MatchPageVO matchPageVO = new MatchPageVO();
-            matchPageVO.setName(matchName);
-            matchPageVO.setDatetime(matchDate);
-            matchPageVO.setMatchUrl(matchLink);
-            matchPageVO.setMatchId(matchId);
-
-            matchesVO.add(matchPageVO);
+        try {
+            matchPageVO = getMatchWithData(driver, leagueUrl);
+        } catch (NoSuchElementException | StaleElementReferenceException e) {
+            parseTopLeaguePage(driver, leagueUrl);
         }
+
+        matchesVO.add(matchPageVO);
         leagueVO.setMatches(matchesVO);
         return leagueVO;
     }
 
-    @Override
-    public MatchPageVO parseMatchPage(WebDriver driver) throws InterruptedException {
+    private MatchPageVO getMatchWithData(WebDriver driver, String leagueUrl) throws InterruptedException {
+        WebElement firstMatch =
+                getElementOnPageWithWaiting(driver,
+                        By.cssSelector(".sportline-events-list_bf1nX"),
+                        leagueUrl).findElement(By.cssSelector(".sportline-event-block_isrbB"));
+
         TimeUnit.SECONDS.sleep(2);
-        WebElement allMarketsButton = getElementWithWaiting(driver,
-                By.xpath("//*/text()[contains(.,'" + "All markets" + "')]/parent::*")); //кнопка для переходу на всі маркети
+        String matchName = parseMatchName(firstMatch);
+        String matchDate = parseMatchDate(firstMatch);
+        String matchLink = getLink(firstMatch.findElement(By.cssSelector("a[href]")));
+        String matchId = parseMatchId(matchLink);
+
+        MatchPageVO matchPageVO = new MatchPageVO();
+        matchPageVO.setName(matchName);
+        matchPageVO.setDatetime(matchDate);
+        matchPageVO.setMatchUrl(matchLink);
+        matchPageVO.setMatchId(matchId);
+        return matchPageVO;
+    }
+
+    @Override
+    public MatchPageVO parseMatchPage(WebDriver driver, String matchUrl) throws InterruptedException {
+        driver.get(matchUrl);
+        TimeUnit.SECONDS.sleep(2);
+
+        WebElement allMarketsButton = getElementOnPageWithWaiting(driver,
+                By.xpath("//*/text()[contains(.,'" + "All markets" + "')]/parent::*"),
+                matchUrl); //кнопка для переходу на всі маркети
+
         allMarketsButton.click();
 
         Map<String, String> matchMarkets = parseMatchMarkets(driver);
@@ -111,7 +130,9 @@ public class LeonParseService implements PageParseService {
 
     private String parseMatchName(WebElement match) {
         String[] parts = match.getText().split("\n");
-        return parts[0] + " - " + parts[1];
+        if (parts.length > 1)
+            return parts[0] + " - " + parts[1];
+        else return parts[0];
     }
 
     private String parseMatchDate(WebElement match) {
@@ -137,9 +158,14 @@ public class LeonParseService implements PageParseService {
         }
     }
 
-    private WebElement getElementWithWaiting(WebDriver driver, By locator) {
-        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(30));
-        return wait.until(ExpectedConditions.presenceOfElementLocated(locator));
+    private WebElement getElementOnPageWithWaiting(WebDriver driver, By locator, String url) {
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(5));
+        try {
+            return wait.until(ExpectedConditions.presenceOfElementLocated(locator));
+        } catch (TimeoutException e) {
+            driver.get(driver.getCurrentUrl());
+            return getElementOnPageWithWaiting(driver, locator, url);
+        }
     }
 
     private String getLink(WebElement element) {
